@@ -1,0 +1,41 @@
+#!/usr/bin/env python
+
+import os
+import glob
+
+
+contaminant_db = "/gpfs/home/znb17pxu/scratch/PCAWG/GCA_000001405.29_GRCh38.p14_genomic.fna"
+krakendb = ""
+
+infiles = glob.glob('/gpfs/home/mgz20ysu/scratch/depleted/*.depleted.fastq.gz')
+
+outfiles = []
+
+for file in infiles:
+    file = os.path.basename(file)
+    file = re.sub('.depleted.fastq.gz', '.kraken_report', file)
+    file = ('depleted/%s' %file)
+    outfiles.append(file)
+
+print(outfiles)
+
+rule all:
+    input: [file for file in outfiles]
+
+rule Kraken_uniq:
+    input:
+        inR1= "human_depleted/{sampleid}_R1.fastq.gz",
+        inR2= "human_depleted/{sampleid}_R2.fastq.gz"
+    output:
+        kraken_out=("depleted/{sampleid}.kraken_out"),
+        kraken_report=("depleted/{sampleid}.kraken_report")
+    priority: 70
+    shell: "krakenuniq --db {krakendb} --only-classified-output --preload --output {output.kraken_out} --report-file {output.kraken_report} --paired {input.$
+
+rule split_fastq:
+    input: "depleted/{sampleid}.depleted.fastq.gz"
+    output:
+        out1= "human_depleted{sampleid}_R1.fastq.gz",
+        out2= "human_depleted{sampleid}_R2.fastq.gz"
+    priority: 60
+    shell: "reformat.sh in={input} out1={output.out1} out2={output.out2}"
