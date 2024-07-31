@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+
+import os
+import glob
+
+
+contaminant_db = "/gpfs/home/mgz20ysu/scratch/pcawg_sepath/GCA_000001405.29_GRCh38.p14_genomic.fna"
+
+infiles = glob.glob('/gpfs/afm/cancergenetics/Datasets/PCAWG/DNA_All/filter/*.filter.fastq.bz2')
+
+outfiles = []
+
+for file in infiles:
+    file = os.path.basename(file)
+    file = re.sub('.filter.fastq.bz2', '.depleted_R1.fastq.gz', file)
+    file = ('/gpfs/afm/cancergenetics/Abe/PCAWG_done/%s' %file)
+    outfiles.append(file)
+
+#print(outfiles)
+
+rule all:
+    input: [file for file in outfiles]
+
+rule touch_cancergenetics:
+    input: "depleted/{sampleid}.depleted_R1.fastq.gz"
+    output: "/gpfs/afm/cancergenetics/Abe/PCAWG_done/{sampleid}.depleted_R1.fastq.gz"
+    priority: 70
+    shell: "echo {input}; touch {output}; chmod 777 {output}"
+
+rule gzip:
+    input:
+        R1="depleted/{sampleid}.depleted_R1.fastq",
+        R2="depleted/{sampleid}.depleted_R2.fastq"
+    output:
+       	R1="depleted/{sampleid}.depleted_R1.fastq.gz",
+       	R2="depleted/{sampleid}.depleted_R2.fastq.gz"
+    priority: 60
+    shell: "gzip {input}; echo {output}"
+
+rule reformat:
+    input: "depleted/{sampleid}.depleted.fastq"
+    output:
+        R1="depleted/{sampleid}.depleted_R1.fastq",
+        R2="depleted/{sampleid}.depleted_R2.fastq"
+    priority: 50
+    shell: "reformat.sh in={input} out1={output.R1} out2={output.R2}"
+
+rule deplete:
+    input: "processing/{sampleid}.trim.fastq"
+    output: temp("depleted/{sampleid}.depleted.fastq")
+    priority: 40
+    shell: "bbduk.sh in={input} out={output} k=30 -Xmx120g ref={contaminant_db} mcf=0.5"
+
+rule trimmomatic:
+    input: 'reads/{sampleid}.filter.fastq'
+    output: temp('processing/{sampleid}.trim.fastq')
+    priority: 30
+    shell: "java -XX:+UseSerialGC -XX:+UseStringDeduplication -jar /gpfs/software/ada/trimmomatic/Trimmomatic-0.39/trimmomatic-0.39.jar SE {input} {output} SLIDINGWINDOW:4:15 MINLEN:50"
+
+rule decompress:
+    input: 'reads/{sampleid}.filter.fastq.bz2'
+    output: temp('reads/{sampleid}.filter.fastq')
+    priority: 20
+    shell: "bzip2 -d {input}; echo {output}"
+
+rule copyfiles:
+    input: '/gpfs/afm/cancergenetics/Datasets/PCAWG/DNA_All/filter/{sampleid}.filter.fastq.bz2'
+    output: temp('reads/{sampleid}.filter.fastq.bz2')
+    priority: 10
+    shell: 'cp {input} {output}'    
+
